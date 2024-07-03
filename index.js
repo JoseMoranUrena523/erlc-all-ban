@@ -27,6 +27,7 @@ async function checkJoinLogs() {
     joinLogs.forEach(async (log) => {
       const player = log.Player;
       if (/^all/i.test(player)) {
+        const playerName = player.split(':')[0];
         const playerId = player.split(':')[1];
 
         try {
@@ -37,7 +38,7 @@ async function checkJoinLogs() {
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-              command: `:pm ${playerId} ${banMessage}`
+              command: `:pm ${playerName} ${banMessage}`
             })
           });
 
