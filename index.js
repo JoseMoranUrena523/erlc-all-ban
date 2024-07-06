@@ -3,17 +3,14 @@ const { QuickDB } = require('quick.db');
 const db = new QuickDB();
 
 const serverKey = 'exampleServerKey'; // Your server key, can be found in private server settings
-const baseURL = 'https://api.policeroleplay.community/v1/'; // Base URL, can be found at https://apidocs.policeroleplay.community/for-developers/api-reference
+const baseURL = 'https://api.policeroleplay.community/v1/'; // Base URL, can be found in https://apidocs.policeroleplay.community/for-developers/api-reference
 const banMessage = 'You are being banned for your username containing the word "all" in the beginning. This can disrupt mods from being able to do their job.'; // Message to be sent before being banned
-const minInterval = 1; // Minimum interval in seconds to prevent too frequent checking (DO NOT UPDATE)
 
 if (serverKey === 'exampleServerKey') {
-  return console.error("You've started the automation for the first time! Please set your server key in line 3 of the script. You can also modify PRC's base URL or the ban message.");
+  return console.error("You've started the automation for the first time! Please set your server key in line 5 of the script. You can also update the ban message in line 7.");
 }
 
-async function checkJoinLogs() {
-  await db.init();
-
+async function fetchJoinLogs() {
   try {
     const response = await fetch(`${baseURL}server/joinlogs`, {
       headers: { 
@@ -28,75 +25,81 @@ async function checkJoinLogs() {
     const joinLogs = await response.json();
     const rateLimitRemaining = response.headers.get('X-RateLimit-Remaining');
     const rateLimitReset = response.headers.get('X-RateLimit-Reset');
-
-    if (rateLimitRemaining <= 1) {
-      const resetTime = rateLimitReset * 1000 - Date.now();
-      console.warn(`Rate limit reached. Waiting for ${resetTime} ms before next check.`);
-      setTimeout(checkJoinLogs, resetTime);
-      return;
-    }
-
-    const playersToBan = joinLogs.filter(log => /^all/i.test(log.Player));
-    await processPlayers(playersToBan, rateLimitRemaining);
-
+    return { joinLogs, rateLimitRemaining, rateLimitReset };
   } catch (error) {
     console.error('Error fetching join logs:', error);
-    setTimeout(checkJoinLogs, 60 * 1000); // Retry after 60 seconds in case of error
+    throw error;
   }
 }
 
-async function processPlayers(players, rateLimitRemaining) {
-  for (let i = 0; i < players.length; i++) {
-    const player = players[i].Player;
-    const playerName = player.split(':')[0];
-    const playerId = player.split(':')[1];
+async function executeCommand(command) {
+  try {
+    const response = await fetch(`${baseURL}server/command`, {
+      method: 'POST',
+      headers: {
+        'Server-Key': serverKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ command })
+    });
 
-    const isBanned = await db.get(playerId);
-    if (isBanned) {
-      console.log(`Player with ID ${playerId} is already banned.`);
+    if (!response.ok) {
+      throw new Error(`Error executing command: ${response.statusText}`);
+    }
+
+    const rateLimitRemaining = response.headers.get('X-RateLimit-Remaining');
+    const rateLimitReset = response.headers.get('X-RateLimit-Reset');
+    return { rateLimitRemaining, rateLimitReset };
+  } catch (error) {
+    console.error(`Error executing command "${command}":`, error);
+    throw error;
+  }
+}
+
+async function processPlayers(players) {
+  for (const player of players) {
+    const playerName = player.Player.split(':')[0];
+    const playerId = player.Player.split(':')[1];
+
+    if (await db.get(playerId)) {
+      console.log(`Player ID ${playerId} already processed. Skipping...`);
       continue;
     }
 
     try {
-      await fetch(`${baseURL}server/command`, {
-        method: 'POST',
-        headers: { 
-          'Server-Key': serverKey,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          command: `:pm ${playerName} ${banMessage}`
-        })
-      });
+      const { rateLimitReset: rateLimitResetPM } = await executeCommand(`:pm ${playerName} ${banMessage}`);
+      const resetTimePM = (parseInt(rateLimitResetPM, 10) * 1000) - Date.now() + 1000;
+      await new Promise(resolve => setTimeout(resolve, resetTimePM));
 
-      await fetch(`${baseURL}server/command`, {
-        method: 'POST',
-        headers: { 
-          'Server-Key': serverKey,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          command: `:ban ${playerId}`
-        })
-      });
-
+      const { rateLimitReset: rateLimitResetBan } = await executeCommand(`:ban ${playerId}`);
+      const resetTimeBan = (parseInt(rateLimitResetBan, 10) * 1000) - Date.now() + 1000;
       await db.set(playerId, true);
 
-      const rateLimitReset = response.headers.get('X-RateLimit-Reset');
-      const resetTime = rateLimitReset * 1000 - Date.now();
-      if (resetTime > 0) {
-        console.log(`Waiting for ${resetTime} ms due to rate limit.`);
-        await new Promise(resolve => setTimeout(resolve, resetTime));
-      }
+      console.log(`Executed :ban on player with ID ${playerId}.`);
+      await new Promise(resolve => setTimeout(resolve, resetTimeBan));
 
     } catch (commandError) {
-      console.error(`Error sending ban commands to player ${playerId}:`, commandError);
+      console.error(`Error executing commands for player ${playerId}:`, commandError);
     }
   }
+}
 
-  let interval = Math.max(minInterval, Math.floor(60 / rateLimitRemaining));
-  console.log(`Next check in ${interval} seconds`);
-  setTimeout(checkJoinLogs, interval * 1000);
+async function checkJoinLogs() {
+  try {
+    const { joinLogs, rateLimitReset: rateLimitReset1 } = await fetchJoinLogs();
+    const resetTime1 = (parseInt(rateLimitReset1, 10) * 1000) - Date.now() + 1000;
+
+    await new Promise(resolve => setTimeout(resolve, resetTime1));
+
+    const playersToBan = joinLogs.filter(log => log.Join && /^all/i.test(log.Player));
+    await processPlayers(playersToBan);
+
+    checkJoinLogs();
+
+  } catch (error) {
+    console.error('Error in checkJoinLogs:', error);
+    setTimeout(checkJoinLogs, 30 * 1000);
+  }
 }
 
 checkJoinLogs();
