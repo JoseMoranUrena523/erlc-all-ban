@@ -4,7 +4,7 @@ const db = new QuickDB();
 
 const serverKey = 'exampleServerKey'; // Your server key, can be found in private server settings
 const baseURL = 'https://api.policeroleplay.community/v1/'; // Base URL, can be found in https://apidocs.policeroleplay.community/for-developers/api-reference
-const banMessage = 'You are being banned for your username containing the word "all" in the beginning. This can disrupt mods from being able to do their job.'; // Message to be sent before being banned
+const banMessage = 'You are being banned for your username containing the word "all" or "others" in the beginning. This can disrupt mods from being able to do their job.'; // Message to be sent before being banned
 
 if (serverKey === 'exampleServerKey') {
   return console.error("You've started the automation for the first time! Please set your server key in line 5 of the script. You can also update the ban message in line 7.");
@@ -95,7 +95,7 @@ async function checkJoinLogs() {
 
     await new Promise(resolve => setTimeout(resolve, resetTime1));
 
-    const playersToBan = joinLogs.filter(log => log.Join && /^all/i.test(log.Player));
+    const playersToBan = joinLogs.filter(log => log.Join && /^(all|others)/i.test(log.Player));
     await processPlayers(playersToBan);
 
     checkJoinLogs();
