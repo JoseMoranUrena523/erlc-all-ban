@@ -5,6 +5,7 @@ const db = new QuickDB();
 const serverKey = 'exampleServerKey'; // Your server key, can be found in private server settings
 const baseURL = 'https://api.policeroleplay.community/v1/'; // Base URL, can be found in https://apidocs.policeroleplay.community/for-developers/api-reference
 const banMessage = 'You are being banned for your username containing the word "all" or "others" in the beginning. This can disrupt mods from being able to do their job.'; // Message to be sent before being banned
+let ssdDelay = 30; // Change the amount of seconds to check join logs during SSD (default 30, be careful of rate limit)
 
 if (serverKey === 'exampleServerKey') {
   return console.error("You've started the automation for the first time! Please set your server key in line 5 of the script. You can also update the ban message in line 7.");
@@ -19,7 +20,20 @@ async function fetchJoinLogs() {
     });
 
     if (response.status === 422) {
-      console.error("Private server is shut down (there are no players), unable to proceed with automation.");
+      const rateLimitReset = response.headers.get('X-RateLimit-Reset');
+      if (rateLimitReset) {
+        const resetTime = (parseInt(rateLimitReset, 10) * 1000) - Date.now() + 1000;
+        if (typeof ssdDelay === 'undefined' || resetTime > ssdDelay) {
+          ssdDelay = resetTime;
+          console.warn("Update line 8, too frequent checking.");
+        }
+        console.error(`Private server is shut down (there are no players), retrying after rate limit reset in ${resetTime / 1000} seconds.`);
+        await new Promise(resolve => setTimeout(resolve, resetTime));
+      } else {
+        console.error("Private server is shut down (there are no players), unable to proceed with automation. Retrying...");
+        await new Promise(resolve => setTimeout(resolve, 30 * 1000));
+      }
+      return fetchJoinLogs();
     }
 
     if (response.status === 403) {
