@@ -1,5 +1,8 @@
 # ER:LC "all" Ban
 
+## Special thanks to those that are using my automation!
+[![image](https://cdn.discordapp.com/icons/1262090668537413775/8b737d9ec3ec5fede1e2534919d9eb6e.png)](https://discord.gg/nawsakg47d)
+
 ## What is this?
 This automation detects when a Roblox user joins your ER:LC private server with a username starting with "all" or "others". It then sends them a private message and proceeds to ban them. (interval cannot be updated due to rate limiting set by PRC).
 
