@@ -19,19 +19,19 @@ async function fetchJoinLogs() {
     });
 
     if (response.status === 422) {
-      throw new Error("Private server is shut down (there are no players), unable to proceed with automation.");
+      console.error("Private server is shut down (there are no players), unable to proceed with automation.");
     }
 
     if (response.status === 403) {
-      throw new Error("Invalid server key.");
+      return console.error("Invalid server key.");
     }
 
     if (response.status === 500) {
-      throw new Error("There was a problem communicating with Roblox.");
+      return console.error("There was a problem communicating with Roblox.");
     }
     
     if (!response.ok) {
-      throw new Error(`Error: ${response.statusText}`);
+      return console.error(`Error: ${response.statusText}`);
     }
 
     const joinLogs = await response.json();
